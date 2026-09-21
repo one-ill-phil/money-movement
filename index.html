@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Post Pay Run Workflow — Instant ACH prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&family=PT+Serif:wght@700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* GS Design Library tokens */
+    --gray1: #353536;
+    --gray2: #747575;
+    --gray3: #E9EBED;
+    --gray4: #F9F9F9;
+    --gray5: #D9D9D9;
+    --page-bg: #F3F4F5;
+    --white: #FFFFFF;
+    --black: #000000;
+    --blue: #216DF1;
+    --blue-hover: #0546B6;
+    --purple: #3A0CA3;
+    --red: #B10625;
+    --red-hover: #8D061F;
+    --yellow: #F5D50C;
+    --orange: #ED7C2E;
+    --green: #116700;
+    --magenta: #F12178; /* GS doc annotation color — reserved here for prototype-only chrome */
+
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --gray1: #E9EBED; --gray2: #B7B9BA; --gray3: #46474a; --gray4: #2a2b2c; --gray5: #3a3b3c;
+      --page-bg: #1c1d1e; --white: #232425; --black: #f2f2f2;
+    }
+  }
+  :root[data-theme="dark"] {
+    --gray1: #E9EBED; --gray2: #B7B9BA; --gray3: #46474a; --gray4: #2a2b2c; --gray5: #3a3b3c;
+    --page-bg: #1c1d1e; --white: #232425; --black: #f2f2f2;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page-bg);
+    color: var(--black);
+    font-family: "Source Sans Pro", -apple-system, "Segoe UI", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 21px;
+  }
+  .page { max-width: 1280px; margin: 0 auto; padding: 24px 24px 64px; }
+
+  .back-link {
+    display: inline-block; margin-bottom: 16px;
+    font-family: "Source Sans Pro", sans-serif; font-weight: 600; font-size: 14px;
+    color: var(--blue); text-decoration: none;
+  }
+  .back-link:hover { text-decoration: underline; }
+
+  .card {
+    background: var(--white);
+    border-radius: 5px;
+    box-shadow: 0px 2px 6px 0px rgba(0,0,0,0.15);
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+  h1.page-title {
+    font-family: "PT Serif", serif; font-weight: 700; font-size: 32px; line-height: 42px;
+    color: var(--gray1); text-align: center; margin: 0 0 16px;
+  }
+  .header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; max-width: 720px; margin: 0 auto; }
+  .header-grid .item { font-size: 16px; }
+  .header-grid .item b { font-weight: 700; }
+
+  .section {
+    background: var(--white);
+    border-radius: 5px;
+    box-shadow: 0px 2px 6px 0px rgba(0,0,0,0.15);
+    margin-bottom: 24px;
+    overflow: hidden;
+  }
+  .section-header {
+    background: var(--gray4);
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 24px;
+    cursor: pointer; user-select: none;
+  }
+  .section-header .dot { width: 20px; height: 20px; border: 2px solid var(--gray2); border-radius: 50%; flex-shrink: 0; }
+  .section-header .title {
+    font-weight: 600; font-size: 20px; line-height: 26px; color: var(--black); flex: 1;
+  }
+  .section-header .chevron { font-size: 16px; color: var(--gray1); transition: transform .15s ease; }
+  .section.open .chevron { transform: rotate(180deg); }
+  .section-body { display: none; padding: 8px 24px 24px; }
+  .section.open .section-body { display: block; }
+
+  .row {
+    display: flex; justify-content: space-between; gap: 32px;
+    padding: 24px 0; border-bottom: 1px solid var(--gray3);
+  }
+  .row:last-of-type { border-bottom: none; }
+  .row .left { flex: 1; min-width: 0; }
+  .row .left .title { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
+  .row .left .desc { color: var(--gray2); font-size: 16px; }
+  .row .left .meta { color: var(--gray2); font-size: 12px; margin-top: 8px; }
+  .row .left .links a { color: var(--blue); text-decoration: none; font-size: 14px; font-weight: 600; display: block; margin-top: 4px; }
+  .row .right { text-align: right; flex-shrink: 0; min-width: 220px; }
+  .row .right .stat { font-weight: 600; font-size: 16px; }
+  .row .right .stat.muted { font-weight: 400; color: var(--gray2); font-size: 14px; }
+
+  /* Buttons — Small variant only, per style guide */
+  .btn {
+    font-family: "Source Sans Pro", sans-serif; font-weight: 600; font-size: 16px; line-height: 20px;
+    min-height: 40px; min-width: 100px; padding: 10px 12px;
+    border-radius: 5px; cursor: pointer; text-align: center;
+    display: inline-block; margin-top: 12px;
+  }
+  .btn-primary { background: var(--blue); border: 1px solid var(--blue); color: var(--white); }
+  .btn-primary:hover { background: var(--blue-hover); border-color: var(--blue-hover); }
+  .btn-secondary { background: var(--white); border: 1px solid var(--blue); color: var(--blue); }
+  .btn-secondary:hover { background: var(--blue); color: var(--white); }
+  .btn-ghost { background: transparent; border: none; color: var(--black); min-width: auto; }
+  .btn-destructive-secondary { background: var(--white); border: 1px solid var(--red); color: var(--red); }
+  .btn-danger-primary { background: var(--red); border: 1px solid var(--red); color: var(--white); }
+  .btn-danger-primary:hover { background: var(--red-hover); border-color: var(--red-hover); }
+
+  .mark-complete-row { display: flex; justify-content: flex-end; padding-top: 8px; }
+
+  table.static-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 8px; }
+  table.static-table td { padding: 8px; border-bottom: 1px solid var(--gray3); text-align: right; }
+  table.static-table td:first-child { text-align: left; }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    display: none; align-items: center; justify-content: center; padding: 24px; z-index: 100;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--white); border-radius: 5px;
+    box-shadow: 0px 2px 8px 4px rgba(0,0,0,0.25);
+    max-height: 90vh; overflow-y: auto; position: relative;
+    padding: 32px;
+  }
+  .modal-medium { width: 500px; max-width: 100%; }
+  .modal-xl { width: 1000px; max-width: 100%; }
+
+  /* Slide-in panel — GS VerticalPanel component */
+  .panel-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    display: none; z-index: 100;
+  }
+  .panel-overlay.open { display: block; }
+  .slide-panel {
+    position: fixed; top: 0; right: 0; height: 100%; width: 90vw;
+    background: var(--white);
+    box-shadow: -4px 0 12px rgba(0,0,0,0.25);
+    display: flex; flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    z-index: 101;
+  }
+  .slide-panel.open { transform: translateX(0); }
+  .panel-header {
+    flex-shrink: 0; padding: 24px 32px; border-bottom: 1px solid var(--gray3); position: relative;
+  }
+  .panel-header .panel-title { font-weight: 700; font-size: 24px; color: var(--gray1); margin: 0 0 6px; padding-right: 32px; }
+  .panel-header .panel-desc { font-size: 16px; color: var(--gray2); padding-right: 32px; }
+  .panel-close {
+    position: absolute; top: 24px; right: 32px; font-size: 20px; line-height: 1;
+    color: var(--black); background: none; border: none; cursor: pointer;
+  }
+  .panel-content { flex: 1; overflow-y: auto; padding: 24px 32px; }
+  .panel-footer {
+    flex-shrink: 0; border-top: 1px solid var(--gray3); padding: 16px 32px;
+    display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .panel-footer .btn { margin-top: 0; }
+  @media (max-width: 700px) {
+    .slide-panel { width: 100vw; }
+  }
+  .modal-close {
+    position: absolute; top: 20px; right: 20px; font-size: 20px; line-height: 1;
+    color: var(--black); background: none; border: none; cursor: pointer;
+  }
+  .modal-status-icon { text-align: center; font-size: 40px; margin-bottom: 8px; }
+  .modal-title { font-family: "Source Sans Pro", sans-serif; font-weight: 700; font-size: 24px; color: var(--gray1); text-align: center; margin: 0 0 16px; }
+  .modal-body-text { font-size: 16px; line-height: 24px; text-align: center; color: var(--black); margin-bottom: 20px; }
+  .modal-buttons { display: flex; justify-content: center; gap: 20px; margin-top: 8px; }
+
+  .stat-card {
+    display: inline-flex; align-items: center; gap: 16px;
+    background: var(--white); border: 1px solid var(--gray3); border-radius: 5px;
+    padding: 12px 20px; box-shadow: 0px 2px 6px 0px rgba(0,0,0,0.15);
+  }
+  .stat-item { display: flex; flex-direction: column; align-items: center; min-width: 64px; }
+  .stat-num { font-size: 26px; font-weight: 700; line-height: 1; }
+  .stat-label { font-size: 11px; font-weight: 600; color: var(--gray2); text-transform: uppercase; letter-spacing: .04em; margin-top: 4px; }
+  .stat-sep { color: var(--gray3); font-size: 22px; font-weight: 300; }
+  .chip-settled { color: var(--green); }
+  .chip-inflight { color: var(--orange); }
+  .chip-returned { color: var(--red); }
+  .chip-resolved { color: var(--gray2); }
+
+  .segmented { display: inline-flex; border: 1px solid var(--blue); border-radius: 5px; overflow: hidden; }
+  .segmented button {
+    font-family: "Source Sans Pro", sans-serif; font-weight: 600; font-size: 14px;
+    height: 40px; padding: 0 16px; border: none; cursor: pointer; background: var(--white); color: var(--blue);
+  }
+  .segmented button.active { background: var(--blue); color: var(--white); }
+
+  /* Column filter — GS "Column filters" doc: 16px icon, Default/Hover/Focus states */
+  .filter-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 16px; height: 16px; margin-left: 6px; border-radius: 3px;
+    color: var(--gray2); border: 1px solid transparent; background: transparent;
+    cursor: pointer; vertical-align: middle;
+  }
+  .filter-icon:hover { border: 1px solid var(--yellow); color: var(--yellow); }
+  .filter-icon.active { background: var(--yellow); color: var(--purple); border-color: var(--yellow); }
+  .filter-dropdown {
+    display: none; position: absolute; top: 100%; left: 0; margin-top: 4px;
+    min-width: 200px; max-width: 300px; background: var(--white);
+    border: 1px solid var(--gray3); border-radius: 5px;
+    box-shadow: 0px 2px 8px 4px rgba(0,0,0,0.15); padding: 8px; z-index: 5;
+  }
+  .filter-dropdown label {
+    display: flex; align-items: center; gap: 8px; padding: 8px 6px; font-size: 14px;
+    font-weight: 400; color: var(--black); cursor: pointer; white-space: nowrap;
+  }
+  .filter-dropdown label:hover { background: var(--gray4); border-radius: 3px; }
+  .filter-dropdown input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--blue); }
+
+  /* Tooltip — GS doc: dark bubble #353536, white text, 16px pad, radius 5, max-width 280px, min-height 50px */
+  .tooltip-trigger {
+    position: relative; display: inline-flex; align-items: center; gap: 4px;
+    cursor: help; border-bottom: 1px dotted var(--gray2);
+  }
+  .tooltip-trigger .info-icon { color: var(--blue); flex-shrink: 0; }
+  .tooltip-bubble {
+    display: none; position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+    background: #353536; color: #fff; font-size: 14px; line-height: 18px;
+    padding: 16px; border-radius: 5px; width: max-content; max-width: 280px; min-height: 50px;
+    box-shadow: 0px 2px 8px 0px rgba(0,0,0,0.3); z-index: 20;
+  }
+  .tooltip-bubble::after {
+    content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+    border: 6px solid transparent; border-top-color: #353536;
+  }
+  .tooltip-trigger:hover .tooltip-bubble, .tooltip-trigger:focus .tooltip-bubble, .tooltip-trigger:focus-within .tooltip-bubble { display: block; }
+
+  .segmented.small button { height: 30px; padding: 0 10px; font-size: 12px; }
+  .preview-toggle { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .preview-label { font-size: 11px; color: var(--gray2); text-transform: uppercase; letter-spacing: .03em; }
+
+  .countdown-box { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; }
+  .countdown-clock { font-size: 20px; font-weight: 700; color: var(--blue); font-variant-numeric: tabular-nums; }
+  .queued-box {
+    display: flex; gap: 10px; align-items: flex-start; margin-top: 10px;
+    background: var(--gray4); border-radius: 5px; padding: 12px 14px;
+  }
+  .queued-box .clock-icon { color: var(--gray2); flex-shrink: 0; margin-top: 2px; }
+  .queued-box .queued-title { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+  .queued-box .queued-text { font-size: 13px; color: var(--gray2); }
+
+  /* Floating prototype-only controls — deliberately distinct chrome so this never reads as product UI */
+  .proto-panel {
+    position: fixed; bottom: 16px; left: 16px; z-index: 300;
+    background: var(--white); border: 2px dashed var(--magenta); border-radius: 8px;
+    padding: 12px 16px; width: 200px;
+    font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+    box-shadow: 0px 4px 12px rgba(0,0,0,0.2);
+  }
+  .proto-panel .proto-label {
+    font-size: 10px; font-weight: 700; letter-spacing: .06em; color: var(--magenta);
+    text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;
+  }
+  .proto-panel .proto-label::before { content: "\1F6E0"; font-size: 11px; }
+  .proto-panel .proto-caption { font-size: 10px; color: var(--gray2); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
+  .proto-panel .proto-group { margin-bottom: 10px; }
+  .proto-panel .proto-group:last-child { margin-bottom: 0; }
+  .proto-panel .segmented.small { border-color: var(--magenta); width: 100%; }
+  .proto-panel .segmented.small button { color: var(--magenta); flex: 1; font-size: 11px; padding: 0 8px; }
+  .proto-panel .segmented.small button.active { background: var(--magenta); color: var(--white); }
+  .proto-link {
+    display: block; font-size: 12px; font-weight: 600; color: var(--magenta);
+    text-decoration: underline; cursor: pointer;
+  }
+
+  table.emp-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 16px; }
+  table.emp-table th {
+    text-align: left; font-weight: 700; font-size: 12px; letter-spacing: .02em; color: var(--gray2);
+    padding: 8px; background: var(--gray4); border-bottom: 1px solid var(--gray3);
+    position: sticky; top: 0; z-index: 1;
+  }
+  .perf-note { font-size: 12px; color: var(--gray2); margin-top: 4px; }
+  .sort-arrow { font-size: 10px; margin-left: 4px; color: var(--blue); }
+  table.emp-table th:hover { color: var(--blue); }
+  table.emp-table td { padding: 10px 8px; border-bottom: 1px solid var(--gray3); }
+  table.emp-table tr:nth-child(even) td { background: var(--gray4); }
+  .status-settled { color: var(--green); font-weight: 600; }
+  .status-inflight { color: var(--orange); font-weight: 600; }
+  .status-returned { color: var(--red); font-weight: 600; }
+  .status-resolved { color: var(--gray2); font-weight: 600; }
+
+  .modal-footer-row { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; flex-wrap: wrap; gap: 12px; }
+  .empty-state { padding: 24px 8px; color: var(--gray2); font-size: 16px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <a class="back-link" href="#" onclick="return false;">&larr; Return to Payroll Dashboard</a>
+
+  <div class="card">
+    <h1 class="page-title">Post Pay Run Workflow</h1>
+    <div class="header-grid">
+      <div class="item"><b>Payrun Name:</b> Weekly - Group A 05/22/2026 (Scheduled)</div>
+      <div class="item"><b>Schedule Type:</b> Weekly</div>
+      <div class="item"><b>Check Date:</b> 05/22/2026</div>
+      <div class="item"><b>Employee Count:</b> 17</div>
+      <div class="item"><b>Pay Period:</b> 05/10/2026 - 05/16/2026</div>
+      <div class="item"><b>Total Cost:</b> $ 10,250.11</div>
+    </div>
+  </div>
+
+  <!-- PAY YOUR EMPLOYEES -->
+  <div class="section open" id="sec-pay">
+    <div class="section-header" onclick="toggleSection('sec-pay')">
+      <span class="dot"></span>
+      <span class="title">Pay Your Employees</span>
+      <span class="chevron">&#9662;</span>
+    </div>
+    <div class="section-body">
+
+      <div class="row">
+        <div class="left">
+          <div class="title">View Your Pay Run Register</div>
+          <div class="desc">Your pay run register will contain your pay run information per employee.</div>
+        </div>
+        <div class="right">
+          <div class="stat">17 Total Employees</div>
+          <div class="stat">$ 10,250.11 Total Payroll Cost</div>
+          <div><button class="btn btn-secondary">View Report</button></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="left">
+          <div class="title">View Your Positive Pay File Details Report</div>
+          <div class="desc">View the positive pay file created by this pay run.</div>
+        </div>
+        <div class="right"><button class="btn btn-secondary">View Report</button></div>
+      </div>
+
+      <!-- INSTANT ACH ROW -->
+      <div class="row">
+        <div class="left">
+          <div class="title">Send Your Direct Deposit via Instant ACH</div>
+          <div class="desc">Pay eligible employees today via NatPayNOW &mdash; instant where the employee's bank supports it, otherwise standard ACH.</div>
+          <div id="ia-dynamic-left"></div>
+        </div>
+        <div class="right" id="ia-right"></div>
+      </div>
+
+      <div class="row">
+        <div class="left">
+          <div class="title">Download Your Garnishments ACH File</div>
+          <div class="desc">Download your Garnishments ACH file in order to pay your employees' garnishment obligations via direct deposit.</div>
+          <div class="meta">File Last Created: 08/06/2026 at 04:17 PM</div>
+          <div class="links"><a href="#" onclick="return false;">Refresh Garnishments Data</a></div>
+        </div>
+        <div class="right">
+          <div class="stat">0 Payments</div>
+          <div><button class="btn btn-secondary">Download</button></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="left">
+          <div class="title">Distribute Pay Checks</div>
+          <div class="desc">Your 16 printed pay checks are numbered 9245-9260. Distribute paper checks yourself or request for Greenshades to Print and Mail these paychecks via Pay History.</div>
+          <div class="links"><a href="#" onclick="return false;">Print Pay Stubs</a></div>
+        </div>
+        <div class="right">
+          <div class="stat">16 Total Paychecks</div>
+          <div class="stat">Numbers: 9245-9260</div>
+          <div class="stat">$ 5,440.67 Total Net Wages</div>
+          <div><button class="btn btn-secondary">Distribute</button></div>
+        </div>
+      </div>
+
+      <div class="mark-complete-row"><button class="btn btn-primary">Mark as Complete</button></div>
+    </div>
+  </div>
+
+  <!-- REVIEW BENEFITS & DEDUCTIONS -->
+  <div class="section" id="sec-bd">
+    <div class="section-header" onclick="toggleSection('sec-bd')">
+      <span class="dot"></span><span class="title">Review Your Benefits &amp; Deductions Totals</span><span class="chevron">&#9662;</span>
+    </div>
+    <div class="section-body">
+      <table class="static-table">
+        <tr><td>8767</td><td>$ 0.00</td><td>$ 203.15</td><td>$ 203.15</td></tr>
+        <tr><td>12589</td><td>$ 0.00</td><td>$ 169.30</td><td>$ 169.30</td></tr>
+        <tr><td>85679</td><td>$ 0.00</td><td>$ 91.68</td><td>$ 91.68</td></tr>
+      </table>
+      <div class="row">
+        <div class="left">
+          <div class="title">View Your Benefits &amp; Deductions Report</div>
+          <div class="desc">Here is your Benefit &amp; Deduction Summary. Use this report to pay your vendors and review your benefits.</div>
+        </div>
+        <div class="right">
+          <div class="stat">$ 0.00 Total Benefit Cost</div>
+          <div class="stat">$ 1,023.79 Total Deduction Cost</div>
+          <div><button class="btn btn-secondary">View Report</button></div>
+        </div>
+      </div>
+      <div class="mark-complete-row"><button class="btn btn-primary">Mark as Complete</button></div>
+    </div>
+  </div>
+
+  <!-- REVIEW TAX LIABILITY -->
+  <div class="section" id="sec-tax">
+    <div class="section-header" onclick="toggleSection('sec-tax')">
+      <span class="dot"></span><span class="title">Review Tax Liability Totals</span><span class="chevron">&#9662;</span>
+    </div>
+    <div class="section-body">
+      <table class="static-table">
+        <tr><td>California State Tax</td><td>$ 0.00</td><td>$ 87.11</td><td>$ 87.11</td></tr>
+        <tr><td>Employer Medicare Tax</td><td>$ 134.97</td><td>$ 0.00</td><td>$ 134.97</td></tr>
+        <tr><td>Employer Social Security Tax</td><td>$ 577.08</td><td>$ 0.00</td><td>$ 577.08</td></tr>
+      </table>
+      <div class="row">
+        <div class="left">
+          <div class="title">View Your Tax Liability Report</div>
+          <div class="desc">Here is your Tax Liability summary. You can see a more detailed report here.</div>
+        </div>
+        <div class="right">
+          <div class="stat">$ 3,259.36 Total Taxes</div>
+          <div><button class="btn btn-secondary">View Report</button></div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="left"><div class="title">Pay Your Taxes</div><div class="desc">Handle your taxes using our Payroll Tax Service.</div></div>
+        <div class="right"><button class="btn btn-secondary">Pay Taxes</button></div>
+      </div>
+      <div class="mark-complete-row"><button class="btn btn-primary">Mark as Complete</button></div>
+    </div>
+  </div>
+
+  <!-- GENERAL LEDGER -->
+  <div class="section" id="sec-gl">
+    <div class="section-header" onclick="toggleSection('sec-gl')">
+      <span class="dot"></span><span class="title">Submit Transactions to the General Ledger</span><span class="chevron">&#9662;</span>
+    </div>
+    <div class="section-body">
+      <div class="row">
+        <div class="left">
+          <div class="title">Create Your General Ledger Batch</div>
+          <div class="desc">Start the process by combining your transactions into a General Ledger Batch.</div>
+          <div class="links"><a href="#" onclick="return false;">View General Ledger Settings</a></div>
+        </div>
+        <div class="right">
+          <div class="stat">9 General Ledger Accounts</div>
+          <div class="stat">$ 23,683.89 Combined Total Amount</div>
+          <div><button class="btn btn-secondary">Generate Batch</button></div>
+        </div>
+      </div>
+      <div class="mark-complete-row"><button class="btn btn-primary">Mark as Complete</button></div>
+    </div>
+  </div>
+
+  <!-- GARNISHMENT TOTALS -->
+  <div class="section" id="sec-garn">
+    <div class="section-header" onclick="toggleSection('sec-garn')">
+      <span class="dot"></span><span class="title">Review Your Garnishment Totals</span><span class="chevron">&#9662;</span>
+    </div>
+    <div class="section-body">
+      <table class="static-table">
+        <tr><td>FALLON MESSICK</td><td>85679</td><td>FED</td><td>$ 91.68</td></tr>
+        <tr><td>FALLON MESSICK</td><td>12589</td><td>FL</td><td>$ 169.30</td></tr>
+        <tr><td>HARTWIN TERRONES</td><td>41656</td><td>FED</td><td>$ 0.00</td></tr>
+      </table>
+      <div class="row">
+        <div class="left">
+          <div class="title">View Your Garnishment Details Report</div>
+          <div class="desc">Here is the summary of your payroll garnishments. You can view a more detailed view by clicking View Report.</div>
+        </div>
+        <div class="right">
+          <div class="stat">11 Garnishments</div>
+          <div class="stat">$ 1,023.79 Total Garnishment Amount</div>
+          <div><button class="btn btn-secondary">View Report</button></div>
+        </div>
+      </div>
+      <div class="mark-complete-row"><button class="btn btn-primary">Mark as Complete</button></div>
+    </div>
+  </div>
+
+  <!-- DOWNLOAD PAYROLL REPORTS -->
+  <div class="section" id="sec-reports">
+    <div class="section-header" onclick="toggleSection('sec-reports')">
+      <span class="dot"></span><span class="title">Download Your Payroll Reports</span><span class="chevron">&#9662;</span>
+    </div>
+    <div class="section-body">
+      <div class="row">
+        <div class="left">
+          <div class="title">Download All Reports for This Pay Run</div>
+          <div class="desc">Download a zip file containing all of your key reports for this pay run. Includes: Pay Run Register, General Liability, Post Pay Report, Liability Summary Report, General Ledger Report, Benefits and Deductions Report, Garnishments Report.</div>
+        </div>
+        <div class="right"><button class="btn btn-secondary">Download</button></div>
+      </div>
+      <div class="mark-complete-row"><button class="btn btn-primary">Mark as Complete</button></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- CONFIRMATION MODAL -->
+<div class="modal-overlay" id="confirm-overlay">
+  <div class="modal-box modal-medium">
+    <button class="modal-close" onclick="cancelConfirm()" aria-label="Close">&#10005;</button>
+    <div class="modal-status-icon" style="color:var(--yellow);">&#9888;</div>
+    <div class="modal-title">Confirm Instant Payment</div>
+    <div class="modal-body-text" id="confirm-body"></div>
+    <div class="modal-buttons">
+      <button class="btn btn-secondary" onclick="cancelConfirm()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitRun()">Confirm and Submit</button>
+    </div>
+  </div>
+</div>
+
+<!-- DOWNLOAD ACH FILE: DECISION TREE -->
+<div class="modal-overlay" id="records-overlay">
+  <div class="modal-box modal-medium" id="download-step-1">
+    <button class="modal-close" onclick="cancelRecordsDownload()" aria-label="Close">&#10005;</button>
+    <div class="modal-title">Download ACH File</div>
+    <div class="modal-body-text">What do you need this file for?</div>
+    <div class="modal-buttons" style="flex-direction:column;gap:12px;align-items:stretch;">
+      <button class="btn btn-secondary" style="width:100%;margin-top:0;" onclick="downloadForRecords()">For my records (audit only)</button>
+      <button class="btn btn-secondary" style="width:100%;margin-top:0;" onclick="showManualSubmitWarning()">To submit manually</button>
+    </div>
+  </div>
+
+  <div class="modal-box modal-medium" id="download-step-2" style="display:none;">
+    <button class="modal-close" onclick="cancelRecordsDownload()" aria-label="Close">&#10005;</button>
+    <div class="modal-status-icon" style="color:var(--red);">&#9888;</div>
+    <div class="modal-title">Before You Submit This File</div>
+    <div class="modal-body-text">We can&rsquo;t confirm with certainty whether any of these payments already went through. <b>If any employees may have already been paid, submitting this file again will pay them a second time.</b> Only proceed if you&rsquo;re confident this run has not already been processed.</div>
+    <div class="modal-buttons">
+      <button class="btn btn-secondary" onclick="backToDownloadStep1()">Back</button>
+      <button class="btn btn-danger-primary" onclick="confirmRecordsDownload()">Download and Submit Manually</button>
+    </div>
+  </div>
+</div>
+
+<!-- REVIEW / DISPOSITION MODAL -->
+<div class="panel-overlay" id="review-overlay">
+  <div class="slide-panel" id="review-panel">
+    <div class="panel-header">
+      <button class="panel-close" onclick="closeReview()" aria-label="Close">&#10005;</button>
+      <div class="panel-title">Instant ACH Payment Status</div>
+      <div class="panel-desc">Employees are paid instantly where their bank supports it, otherwise by standard ACH.</div>
+    </div>
+
+    <div class="panel-content">
+      <div class="modal-footer-row">
+        <div class="stat-card">
+          <div class="stat-item"><div class="stat-num chip-settled" id="count-settled">0</div><div class="stat-label">Settled</div></div>
+          <div class="stat-sep">|</div>
+          <div class="stat-item"><div class="stat-num chip-inflight" id="count-inflight">0</div><div class="stat-label">In flight</div></div>
+          <div class="stat-sep">|</div>
+          <div class="stat-item"><div class="stat-num chip-returned" id="count-returned">0</div><div class="stat-label">Returned</div></div>
+          <div class="stat-sep">|</div>
+          <div class="stat-item"><div class="stat-num chip-resolved" id="count-resolved">0</div><div class="stat-label">Resolved</div></div>
+        </div>
+        <div>
+          <div class="segmented">
+            <button id="seg-attention" onclick="setFilter('attention')">Needs attention</button>
+            <button id="seg-all" onclick="setFilter('all')">Show all</button>
+          </div>
+          <div class="perf-note" id="perf-note"></div>
+        </div>
+      </div>
+
+      <table class="emp-table">
+        <tr>
+          <th style="width:20%;cursor:pointer;user-select:none;" onclick="setSort('name')">EMPLOYEE<span class="sort-arrow" id="sort-arrow-name"></span></th>
+          <th style="width:18%;">
+            <span style="cursor:pointer;user-select:none;" onclick="setSort('rail')">METHOD<span class="sort-arrow" id="sort-arrow-rail"></span></span>
+            <span class="tooltip-trigger" tabindex="0" style="margin-left:4px;border-bottom:none;">
+              <svg class="info-icon" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.4"/><rect x="7.25" y="6.5" width="1.5" height="5" fill="currentColor"/><rect x="7.25" y="4" width="1.5" height="1.4" fill="currentColor"/></svg>
+              <span class="tooltip-bubble" style="text-transform:none;font-weight:400;">RTP/FedNow settles in seconds and can&rsquo;t be reversed. Same-Day ACH settles by end of day and can still be corrected.</span>
+            </span>
+          </th>
+          <th style="width:14%;position:relative;">
+            <span style="cursor:pointer;user-select:none;" onclick="setSort('status')">STATUS<span class="sort-arrow" id="sort-arrow-status"></span></span>
+            <span class="filter-icon" id="status-filter-icon" onclick="toggleStatusFilterDropdown(event)" title="Filter by status" role="button" aria-label="Filter by status">
+              <svg viewBox="0 0 16 16" width="10" height="10" fill="currentColor" aria-hidden="true"><path d="M1 2h14l-5.2 6.2v4.3l-3.6 1.8V8.2z"/></svg>
+            </span>
+            <div class="filter-dropdown" id="status-filter-dropdown" onclick="event.stopPropagation()">
+              <label><input type="checkbox" value="returned" onchange="toggleStatusValue('returned')"> Returned</label>
+              <label><input type="checkbox" value="inflight" onchange="toggleStatusValue('inflight')"> In flight</label>
+              <label><input type="checkbox" value="resolved" onchange="toggleStatusValue('resolved')"> Resolved</label>
+              <label><input type="checkbox" value="settled" onchange="toggleStatusValue('settled')"> Settled</label>
+            </div>
+          </th>
+          <th style="width:26%;cursor:pointer;user-select:none;" onclick="setSort('note')">NOTE<span class="sort-arrow" id="sort-arrow-note"></span></th>
+          <th style="width:22%;">ACTION</th>
+        </tr>
+        <tbody id="emp-rows"></tbody>
+      </table>
+      <div class="empty-state" id="empty-state" style="display:none;">Nothing needs your attention right now.</div>
+    </div>
+
+    <div class="panel-footer" style="justify-content:flex-end;">
+      <button class="btn btn-primary" onclick="closeReview()">Close</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- PROTOTYPE-ONLY CONTROLS — not part of the product UI, kept visually separate on purpose -->
+<div class="proto-panel">
+  <div class="proto-label">Prototype controls</div>
+  <div class="proto-group">
+    <div class="proto-caption">Reverse Wire deadline</div>
+    <div class="segmented small">
+      <button id="preview-before" class="active" onclick="setPreview('before')">Before</button>
+      <button id="preview-after" onclick="setPreview('after')">After</button>
+    </div>
+  </div>
+  <div class="proto-group">
+    <a href="#" id="advance-link" class="proto-link" onclick="advanceTime();return false;" style="display:none;">Advance time &rarr;</a>
+  </div>
+  <div class="proto-group">
+    <a href="#" id="reset-link" class="proto-link" onclick="resetDemo();return false;" style="display:none;">Start a new test run</a>
+  </div>
+</div>
+
+<script>
+function toggleSection(id){ document.getElementById(id).classList.toggle('open'); }
+
+// Deterministic generator so the stress-test dataset is reproducible on every load.
+function generateEmployees(n){
+  var lastNames = ["Alvarez","Chen","Patel","Osei","Novak","Ibrahim","Fontaine","Whitfield","Petrova","Okafor",
+    "Delgado","Nakamura","Brannigan","Reyes","Kowalski","Singh","Dubois","Haddad","Larsen","Mensah"];
+  var reasons = ["Invalid account","Account closed","Insufficient funds"];
+  var arr = [];
+  for(var i=0;i<n;i++){
+    var rail = (i % 5 < 3) ? "instant" : "ach"; // ~60% instant-rail coverage
+    var outcome = "settled", reason = "";
+    if(rail === "ach" && i % 33 === 0){ outcome = "returned"; reason = reasons[i % reasons.length]; }
+    var wage = 380 + (i % 47) * 11.35;
+    arr.push({
+      name: "Employee " + (i+1).toString().padStart(4,'0') + " " + lastNames[i % lastNames.length],
+      rail: rail, outcome: outcome, reason: reason, wage: wage,
+      status: "pending", note: ""
+    });
+  }
+  return arr;
+}
+var employees = generateEmployees(3000);
+var totalWages = employees.reduce(function(sum,e){ return sum + e.wage; }, 0);
+var totalWagesFmt = totalWages.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+var submitted = false;
+var selectedStatuses = new Set(["returned","inflight"]); // default = "Needs attention" preset
+var statusDropdownOpen = false;
+var lastSubmittedAt = null;
+
+function statusLabel(s){
+  if(s==="settled") return "Settled";
+  if(s==="inflight") return "In flight";
+  if(s==="returned") return "Returned";
+  if(s==="resolved") return "Resolved";
+  return "Pending";
+}
+function statusClass(s){ return "status-"+(s||"pending"); }
+function railLabel(e){ return e.rail === "instant" ? "RTP/FedNow" : "Same-Day ACH"; }
+
+
+function tooltip(label, text){
+  return '<span class="tooltip-trigger" tabindex="0">' + label +
+    '<svg class="info-icon" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+    '<circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.4"/>' +
+    '<rect x="7.25" y="6.5" width="1.5" height="5" fill="currentColor"/>' +
+    '<rect x="7.25" y="4" width="1.5" height="1.4" fill="currentColor"/></svg>' +
+    '<span class="tooltip-bubble">' + text + '</span></span>';
+}
+var TT_REVERSE_WIRE = tooltip('Reverse Wire',
+  'A funding method where NatPay pulls funds from your bank account and confirms receipt before releasing any employee payments \u2014 this is what protects against insufficient-funds risk.');
+var TT_RTP_FEDNOW = tooltip('RTP/FedNow',
+  'Real-time payment networks that settle in seconds. Once sent, these payments cannot be reversed \u2014 unlike ACH, there is no return process.');
+
+// Reverse Wire cutoff: 2:30 PM EST the business day before the pay date.
+// Demo-only: deadline is simulated as 90 minutes from page load so the countdown is visibly testable.
+var deadlineTime = new Date(Date.now() + 90*60*1000);
+var deadlinePassed = false;
+var previewOverride = null; // 'before' | 'after' | null (null = follow the real countdown)
+var countdownIntervalId = null;
+
+function nextBusinessDayLabel(){
+  var d = new Date();
+  d.setDate(d.getDate() + 1);
+  while(d.getDay() === 0 || d.getDay() === 6){ d.setDate(d.getDate() + 1); }
+  return d.toLocaleDateString('en-US', {weekday:'long', month:'short', day:'numeric'});
+}
+function isPastDeadline(){
+  if(previewOverride === 'before') return false;
+  if(previewOverride === 'after') return true;
+  return deadlinePassed;
+}
+function setPreview(mode){
+  previewOverride = mode;
+  document.getElementById('preview-before').classList.toggle('active', mode === 'before');
+  document.getElementById('preview-after').classList.toggle('active', mode === 'after');
+  renderCard();
+}
+function tickCountdown(){
+  var remaining = deadlineTime.getTime() - Date.now();
+  if(remaining <= 0){
+    deadlinePassed = true;
+    clearInterval(countdownIntervalId);
+    renderCard();
+    return;
+  }
+  var el = document.getElementById('countdown-clock');
+  if(el){
+    var totalSec = Math.floor(remaining/1000);
+    var h = Math.floor(totalSec/3600), m = Math.floor((totalSec%3600)/60), s = totalSec%60;
+    el.textContent = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+  }
+}
+countdownIntervalId = setInterval(tickCountdown, 1000);
+
+function renderCard(){
+  var right = document.getElementById('ia-right');
+  var dyn = document.getElementById('ia-dynamic-left');
+  var pastDeadline = isPastDeadline();
+  document.getElementById('reset-link').style.display = submitted ? 'inline-block' : 'none';
+
+  if(submitted){
+    var settledCount = employees.filter(function(e){return e.status==="settled"}).length;
+    right.innerHTML =
+      '<div class="stat">'+settledCount.toLocaleString()+' of '+employees.length.toLocaleString()+' settled</div>' +
+      '<div><button class="btn btn-secondary" onclick="openReview()">Review Payment Status</button></div>';
+    dyn.innerHTML =
+      '<div class="meta">Last submitted: '+lastSubmittedAt+'</div>' +
+      '<div class="links">' +
+        '<a href="#" onclick="openRecordsDownload();return false;">Download ACH File</a>' +
+      '</div>';
+    return;
+  }
+
+  if(pastDeadline){
+    right.innerHTML = '<div class="stat muted">Queued for '+nextBusinessDayLabel()+'</div>';
+    dyn.innerHTML =
+      '<div class="queued-box">' +
+        '<span class="clock-icon">&#8987;</span>' +
+        '<div>' +
+          '<div class="queued-title">Today\u2019s '+TT_REVERSE_WIRE+' window has closed</div>' +
+          '<div class="queued-text">Cutoff was 2:30 PM EST. This payment will be automatically submitted for '+nextBusinessDayLabel()+', ahead of the next cutoff. No action is needed.</div>' +
+          '<div class="links" style="margin-top:8px;"><a href="#" onclick="openRecordsDownload();return false;">Download ACH File</a></div>' +
+        '</div>' +
+      '</div>';
+    return;
+  }
+
+  right.innerHTML =
+    '<div class="stat">'+employees.length.toLocaleString()+' Eligible</div>' +
+    '<div class="stat">$ '+totalWagesFmt+' Total Net Wages</div>' +
+    '<div><button class="btn btn-secondary" onclick="askConfirm()">Send Instant Payment</button></div>';
+  dyn.innerHTML =
+    '<div class="countdown-box">' +
+      '<span id="countdown-clock" class="countdown-clock">--:--:--</span>' +
+      '<span class="meta" style="margin-top:0;">until today\u2019s '+TT_REVERSE_WIRE+' cutoff (2:30 PM EST)</span>' +
+    '</div>';
+  tickCountdown();
+}
+
+function askConfirm(){
+  var instantCount = employees.filter(function(e){return e.rail==="instant"}).length;
+  var achCount = employees.length - instantCount;
+  document.getElementById('confirm-body').innerHTML =
+    'This sends $'+totalWagesFmt+' to '+employees.length.toLocaleString()+' employees today. '+instantCount.toLocaleString()+' will be paid instantly via '+TT_RTP_FEDNOW+' &mdash; <b>these cannot be reversed once sent.</b> The remaining '+achCount.toLocaleString()+' go by Same-Day ACH, which can still be corrected if needed.';
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+function cancelConfirm(){ document.getElementById('confirm-overlay').classList.remove('open'); }
+
+function openRecordsDownload(){
+  document.getElementById('download-step-1').style.display = 'block';
+  document.getElementById('download-step-2').style.display = 'none';
+  document.getElementById('records-overlay').classList.add('open');
+}
+function cancelRecordsDownload(){ document.getElementById('records-overlay').classList.remove('open'); }
+function downloadForRecords(){
+  document.getElementById('records-overlay').classList.remove('open');
+  // In a real build this triggers the actual file download; this is a prototype, so just acknowledge.
+}
+function showManualSubmitWarning(){
+  document.getElementById('download-step-1').style.display = 'none';
+  document.getElementById('download-step-2').style.display = 'block';
+}
+function backToDownloadStep1(){
+  document.getElementById('download-step-2').style.display = 'none';
+  document.getElementById('download-step-1').style.display = 'block';
+}
+function confirmRecordsDownload(){
+  document.getElementById('records-overlay').classList.remove('open');
+  // In a real build this triggers the actual file download; this is a prototype, so just acknowledge.
+}
+
+function submitRun(){
+  document.getElementById('confirm-overlay').classList.remove('open');
+  submitted = true;
+  lastSubmittedAt = new Date().toLocaleString();
+  employees.forEach(function(e){
+    if(e.rail === "instant"){ e.status = "settled"; e.note = "Funds delivered"; }
+    else { e.status = "inflight"; e.note = "Awaiting confirmation"; }
+  });
+  renderCard();
+  openReview();
+}
+
+function severityRank(status){
+  if(status === "returned") return 0;
+  if(status === "inflight") return 1;
+  if(status === "resolved") return 2;
+  return 3; // settled
+}
+var sortKey = "status";
+var sortDir = "asc"; // default reproduces severity-first ordering (Returned, In flight, Resolved, Settled)
+
+function setSort(key){
+  if(sortKey === key){ sortDir = sortDir === "asc" ? "desc" : "asc"; }
+  else { sortKey = key; sortDir = "asc"; }
+  renderRows();
+}
+function sortValue(e, key){
+  if(key === "name") return e.name;
+  if(key === "rail") return railLabel(e);
+  if(key === "status") return severityRank(e.status);
+  if(key === "note") return e.note;
+  return "";
+}
+function updateSortHeaders(){
+  ["name","rail","status","note"].forEach(function(col){
+    var el = document.getElementById('sort-arrow-'+col);
+    if(!el) return;
+    el.textContent = sortKey === col ? (sortDir === "asc" ? " \u25B2" : " \u25BC") : "";
+  });
+}
+
+function renderRows(){
+  var t0 = performance.now();
+  var tbody = document.getElementById('emp-rows');
+  var visibleList = [];
+  var settled=0, inflight=0, returned=0, resolved=0;
+  for(var i=0;i<employees.length;i++){
+    var e = employees[i];
+    if(e.status==="settled") settled++;
+    else if(e.status==="inflight") inflight++;
+    else if(e.status==="returned") returned++;
+    else if(e.status==="resolved") resolved++;
+
+    var show = selectedStatuses.has(e.status);
+    if(!show) continue;
+    visibleList.push({e:e, i:i});
+  }
+  visibleList.sort(function(a,b){
+    var av = sortValue(a.e, sortKey), bv = sortValue(b.e, sortKey);
+    var cmp = av < bv ? -1 : (av > bv ? 1 : 0);
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+  updateSortHeaders();
+  syncSegmentedActive();
+  syncStatusCheckboxes();
+
+  var parts = [];
+  for(var k=0;k<visibleList.length;k++){
+    var e = visibleList[k].e, i = visibleList[k].i;
+    var action = e.status === "returned"
+      ? '<button class="btn btn-secondary" style="margin:0 8px 0 0;min-width:80px;padding:6px 10px;min-height:32px;font-size:13px;" onclick="retry('+i+')">Retry</button><button class="btn btn-ghost" style="margin:0;padding:6px 4px;min-height:32px;font-size:13px;" onclick="resolve('+i+')">Resolve</button>'
+      : '';
+    parts.push('<tr><td>'+e.name+'</td><td>'+railLabel(e)+'</td>' +
+      '<td class="'+statusClass(e.status)+'">'+statusLabel(e.status)+'</td>' +
+      '<td>'+e.note+'</td><td>'+action+'</td></tr>');
+  }
+  tbody.innerHTML = parts.join('');
+  document.getElementById('empty-state').style.display = visibleList.length === 0 ? 'block' : 'none';
+  document.getElementById('count-settled').textContent = settled.toLocaleString();
+  document.getElementById('count-inflight').textContent = inflight.toLocaleString();
+  document.getElementById('count-returned').textContent = returned.toLocaleString();
+  document.getElementById('count-resolved').textContent = resolved.toLocaleString();
+  document.getElementById('advance-link').style.display = inflight > 0 ? 'inline-block' : 'none';
+  var t1 = performance.now();
+  document.getElementById('perf-note').textContent =
+    'Rendered ' + visibleList.length.toLocaleString() + ' of ' + employees.length.toLocaleString() + ' rows in ' + (t1-t0).toFixed(0) + 'ms &middot; sorted by severity';
+}
+
+function setFilter(preset){
+  selectedStatuses = preset === "all"
+    ? new Set(["returned","inflight","resolved","settled"])
+    : new Set(["returned","inflight"]);
+  renderRows();
+}
+function syncSegmentedActive(){
+  var attention = ["inflight","returned"].sort().join(",");
+  var all = ["inflight","resolved","returned","settled"].sort().join(",");
+  var current = Array.from(selectedStatuses).sort().join(",");
+  document.getElementById('seg-attention').classList.toggle('active', current === attention);
+  document.getElementById('seg-all').classList.toggle('active', current === all);
+}
+function syncStatusCheckboxes(){
+  var dd = document.getElementById('status-filter-dropdown');
+  if(!dd) return;
+  var boxes = dd.querySelectorAll('input[type="checkbox"]');
+  boxes.forEach(function(cb){ cb.checked = selectedStatuses.has(cb.value); });
+  var icon = document.getElementById('status-filter-icon');
+  icon.classList.toggle('active', selectedStatuses.size < 4);
+}
+function toggleStatusValue(status){
+  if(selectedStatuses.has(status)) selectedStatuses.delete(status);
+  else selectedStatuses.add(status);
+  renderRows();
+}
+function toggleStatusFilterDropdown(e){
+  e.stopPropagation();
+  statusDropdownOpen = !statusDropdownOpen;
+  document.getElementById('status-filter-dropdown').style.display = statusDropdownOpen ? 'block' : 'none';
+}
+document.addEventListener('click', function(e){
+  var dd = document.getElementById('status-filter-dropdown');
+  var icon = document.getElementById('status-filter-icon');
+  if(statusDropdownOpen && dd && !dd.contains(e.target) && !icon.contains(e.target)){
+    statusDropdownOpen = false;
+    dd.style.display = 'none';
+  }
+});
+function openReview(){
+  document.getElementById('review-overlay').classList.add('open');
+  document.getElementById('review-panel').classList.add('open');
+  setFilter('attention');
+}
+function closeReview(){
+  document.getElementById('review-panel').classList.remove('open');
+  document.getElementById('review-overlay').classList.remove('open');
+}
+
+function advanceTime(){
+  employees.forEach(function(e){
+    if(e.status === "inflight"){ e.status = e.outcome; e.note = e.outcome === "settled" ? "Funds delivered" : e.reason; }
+  });
+  renderCard(); renderRows();
+}
+function retry(i){
+  employees[i].status = "inflight"; employees[i].note = "Awaiting confirmation"; employees[i].outcome = "settled";
+  renderRows();
+}
+function resolve(i){
+  employees[i].status = "resolved"; employees[i].note = "Resolved manually";
+  renderRows();
+}
+function resetDemo(){
+  submitted = false; selectedStatuses = new Set(["returned","inflight"]); lastSubmittedAt = null;
+  statusDropdownOpen = false;
+  sortKey = "status"; sortDir = "asc";
+  employees.forEach(function(e){ e.status = "pending"; e.note = ""; });
+  closeReview(); renderCard();
+}
+
+renderCard();
+setFilter('attention');
+</script>
+</body>
+</html>
